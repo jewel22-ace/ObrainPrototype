@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT-like Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #chat-container {
+            width: 100%;
+            max-width: 800px;
+            height: 80vh;
+            background: #2e2e2e;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #chat-window {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            color: #ffffff;
+        }
+        .message {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .message.bot {
+            justify-content: flex-start;
+        }
+        .message.user {
+            justify-content: flex-end;
+        }
+        .message .text {
+            padding: 10px 15px;
+            border-radius: 8px;
+            max-width: 70%;
+        }
+        .message.bot .text {
+            background: #3e3e3e;
+            color: #ffffff;
+        }
+        .message.user .text {
+            background: #007bff;
+            color: #ffffff;
+        }
+        #input-container {
+            display: flex;
+            border-top: 1px solid #444;
+            padding: 10px;
+        }
+        #input-container input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 20px;
+            margin-right: 10px;
+            outline: none;
+            background: #3e3e3e;
+            color: #ffffff;
+        }
+        #input-container button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 20px;
+            background: #007bff;
+            color: #ffffff;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.3s;
+        }
+        #input-container button.clicked {
+            background-color: #0056b3;
+        }
+        #file-upload-container {
+            padding: 10px;
+            border-top: 1px solid #444;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #file-upload-container input[type="file"] {
+            display: none;
+        }
+        #file-upload-container label {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 20px;
+            background: #007bff;
+            color: #ffffff;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.3s;
+            display: inline-block;
+            text-align: center;
+        }
+        #file-upload-container label.clicked {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-window"></div>
+        <div id="input-container">
+            <input type="text" id="query" placeholder="Type a message..." required>
+            <button onclick="sendMessage()">Send</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+        <!-- Only show the file upload container if the user is an admin -->
+        {% if is_admin %}
+        <div id="file-upload-container">
+            <input type="file" id="csv-file" accept=".csv" onchange="handleFileSelect(event)">
+            <label for="csv-file" id="choose-file">Choose File</label>
+            <button id="upload-button" onclick="uploadFile()" style="display: none;">Upload</button>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function addMessage(text, sender) {
+            const chatWindow = document.getElementById('chat-window');
+            const message = document.createElement('div');
+            message.classList.add('message', sender);
+            const messageText = document.createElement('div');
+            messageText.classList.add('text');
+            messageText.textContent = text;
+            message.appendChild(messageText);
+            chatWindow.appendChild(message);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        function sendMessage() {
+            const queryInput = document.getElementById('query');
+            const query = queryInput.value;
+            if (query.trim() === '') return;
+            addMessage(query, 'user');
+            queryInput.value = '';
+
+            fetch('/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ query: query })
+            })
+            .then(response => response.json())
+            .then(data => {
+                data.forEach((result, index) => {
+                    addMessage(result, 'bot');
+                });
+            });
+        }
+
+        document.getElementById('query').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            const chooseFileLabel = document.getElementById('choose-file');
+            const uploadButton = document.getElementById('upload-button');
+
+            if (file) {
+                chooseFileLabel.textContent = file.name;
+                uploadButton.style.display = 'inline-block';
+            } else {
+                chooseFileLabel.textContent = 'Choose File';
+                uploadButton.style.display = 'none';
+            }
+        }
+
+        function uploadFile() {
+            const fileInput = document.getElementById('csv-file');
+            const file = fileInput.files[0];
+            const uploadButton = document.getElementById('upload-button');
+            const chooseFileLabel = document.getElementById('choose-file');
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadButton.classList.add('clicked');
+
+            fetch('/upload_csv', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                uploadButton.classList.remove('clicked');
+                chooseFileLabel.textContent = 'Choose File';
+                uploadButton.style.display = 'none';
+            })
+            .catch(error => {
+                alert('An error occurred while uploading the file.');
+                uploadButton.classList.remove('clicked');
+                chooseFileLabel.textContent = 'Choose File';
+                uploadButton.style.display = 'none';
+            });
+        }
+
+        function logout() {
+            fetch('/logout')
+            .then(response => {
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
